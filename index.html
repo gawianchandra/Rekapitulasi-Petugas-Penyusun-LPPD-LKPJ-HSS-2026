@@ -22,13 +22,13 @@
                 <button onclick="switchTab('lppd')" id="btn-lppd" class="px-4 py-2 bg-white text-emerald-900 font-semibold rounded-lg shadow transition">Penyusun LPPD</button>
                 <button onclick="switchTab('lkpj')" id="btn-lkpj" class="px-4 py-2 bg-emerald-950 text-white font-semibold rounded-lg shadow transition hover:bg-emerald-900">Penyusun LKPJ Bupati</button>
                 
-                <!-- Indikator Status Deduplikasi NIP -->
+                <!-- Indikator Status -->
                 <div class="px-3 py-2 bg-emerald-700/80 border border-emerald-600 text-emerald-100 rounded-lg text-xs font-medium flex items-center gap-2 shadow-inner">
                     <span class="relative flex h-2.5 w-2.5">
                       <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-300"></span>
                     </span>
-                    <span>Peremajaan Data Aktif (Deduplikasi NIP)</span>
+                    <span>Deduplikasi & Peremajaan NIP Aktif</span>
                 </div>
             </div>
         </div>
@@ -68,13 +68,16 @@
                 <p class="text-xs text-rose-500 font-medium mt-4">Instansi dalam master berheader</p>
             </div>
 
-            <!-- Card Total Petugas Unik -->
+            <!-- Card Total Petugas Unik & Info Ganda -->
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                 <div>
-                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Petugas Unik (NIP)</p>
-                    <p class="text-3xl font-extrabold text-slate-800 mt-2" id="kpi-total">0</p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Petugas Bersih (Unik)</p>
+                    <div class="flex items-baseline gap-2 mt-2">
+                        <span class="text-3xl font-extrabold text-slate-800" id="kpi-total">0</span>
+                        <span class="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full" id="kpi-duplikat">0 Ganda</span>
+                    </div>
                 </div>
-                <p class="text-xs text-slate-500 mt-4">Bersih dari kiriman ganda</p>
+                <p class="text-xs text-slate-500 mt-4" id="kpi-info-ganda">Terfilter dari pengiriman ganda form</p>
             </div>
 
             <!-- Card Status Dokumen -->
@@ -102,7 +105,7 @@
             <div class="p-6 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4 bg-emerald-50/50">
                 <div>
                     <h3 class="text-lg font-bold text-emerald-950" id="table-title">Perangkat Daerah yang Sudah Mendaftar</h3>
-                    <p class="text-xs text-emerald-700 mt-0.5">Instansi yang tercatat dalam data sumber pengisian (Petugas Unik)</p>
+                    <p class="text-xs text-emerald-700 mt-0.5">Instansi yang tercatat dalam data sumber pengisian (Bersih dari duplikat NIP)</p>
                 </div>
                 <div class="w-full md:w-80">
                     <input type="text" id="searchInputSudah" onkeyup="filterTableSudah()" placeholder="Cari instansi atau nama..." class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
@@ -155,7 +158,7 @@
 
     <!-- Footer -->
     <footer class="bg-white border-t border-slate-200 py-6 text-center text-slate-500 text-sm mt-12">
-        <p>&copy; 2026 Kabupaten Hulu Sungai Selatan. Rekapitulasi Petugas Penyusun LPPD & LKPJ (Metode Deduplikasi NIP).</p>
+        <p>&copy; 2026 Kabupaten Hulu Sungai Selatan. Rekapitulasi Petugas Penyusun LPPD & LKPJ (Dengan Deduplikasi NIP).</p>
     </footer>
 
     <!-- JavaScript logic & Deduplikasi NIP -->
@@ -306,15 +309,12 @@
             {nip: "199208052025212177", pd: "Dinas Pendidikan dan Kebudayaan", nama: "Rizky Purwandari, S.Pd", link: "https://drive.google.com/open?id=1TwVTh_SSm6IuiwKDZqn4VHoskU3BD0se"}
         ];
 
-        // LOGIKA DEDUPLIKASI BERDASARKAN NIP (Memilih kiriman paling akhir jika ada duplikasi NIP)
         function getDeduplicatedData(rawData) {
             const nipMap = {};
             rawData.forEach(item => {
                 if (item.nip && item.nip.trim() !== "") {
-                    // Menyimpan/Menimpa entri terbaru jika NIP sama
                     nipMap[item.nip.trim()] = item;
                 } else {
-                    // Jika tidak ada NIP, simpan berdasarkan nama & pd unik
                     nipMap[item.pd + '_' + item.nama] = item;
                 }
             });
@@ -378,15 +378,21 @@
             const belumCount = belumMendaftarPD.length;
             const percentage = Math.round((terdaftarCount / targetCount) * 100);
 
-            // Hitung total petugas unik bersih dari duplikasi NIP
+            // Statistik Deduplikasi
+            const totalRawEntries = currentRawData.length;
             const totalPetugasUnik = getDeduplicatedData(currentRawData).length;
+            const jumlahDuplikat = totalRawEntries - totalPetugasUnik;
 
             document.getElementById('kpi-pd-terdaftar').innerText = terdaftarCount;
             document.getElementById('kpi-pd-target').innerText = targetCount;
             document.getElementById('kpi-pd-persen').innerText = percentage + "%";
             document.getElementById('kpi-pd-bar').style.width = Math.min(percentage, 100) + "%";
             document.getElementById('kpi-pd-belum').innerText = belumCount;
-            document.getElementById('kpi-total').innerText = totalPetugasUnik;
+            
+            // Update KPI Total & Keterangan Ganda
+            document.getElementById('kpi-total').innerText = totalPetugasUnik + " Orang";
+            document.getElementById('kpi-duplikat').innerText = jumlahDuplikat + " Entri Ganda";
+            document.getElementById('kpi-info-ganda').innerText = `Dari total ${totalRawEntries} pengiriman form`;
 
             document.getElementById('table-title').innerText = `Perangkat Daerah yang Sudah Mendaftar ${activeTabName.toUpperCase()} (${terdaftarCount} dari ${targetCount} Instansi)`;
             document.getElementById('table-title-belum').innerText = `Perangkat Daerah yang Belum Mendaftar ${activeTabName.toUpperCase()} (${belumCount} Instansi)`;
