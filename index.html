@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse CDN untuk parsing CSV otomatis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
 <body class="bg-slate-50 font-sans antialiased">
 
@@ -22,21 +24,28 @@
                 <button onclick="switchTab('lppd')" id="btn-lppd" class="px-4 py-2 bg-white text-emerald-900 font-semibold rounded-lg shadow transition">Penyusun LPPD</button>
                 <button onclick="switchTab('lkpj')" id="btn-lkpj" class="px-4 py-2 bg-emerald-950 text-white font-semibold rounded-lg shadow transition hover:bg-emerald-900">Penyusun LKPJ Bupati</button>
                 
-                <!-- Indikator Status -->
-                <div class="px-3 py-2 bg-emerald-700/80 border border-emerald-600 text-emerald-100 rounded-lg text-xs font-medium flex items-center gap-2 shadow-inner">
-                    <span class="relative flex h-2.5 w-2.5">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-300"></span>
-                    </span>
-                    <span>Deduplikasi & Peremajaan NIP Aktif</span>
-                </div>
+                <!-- Tombol Unggah CSV Terbaru -->
+                <label class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg shadow cursor-pointer transition text-xs flex items-center gap-1.5">
+                    📂 Perbarui CSV Respon
+                    <input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="handleFileUpload(event)">
+                </label>
             </div>
         </div>
     </header>
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 py-8">
+        <div id="sheetSyncStatus" role="status" class="mb-5 px-4 py-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl text-sm">
+            <span id="sheetSyncMessage">Menghubungkan dashboard ke Google Sheets...</span>
+            <span id="sheetSyncUpdated" class="ml-2 text-xs font-semibold"></span>
+        </div>
         
+        <!-- Notifikasi Status File -->
+        <div id="uploadAlert" class="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl text-sm flex items-center justify-between hidden">
+            <span id="uploadAlertText">Data berhasil dimuat ulang dari file CSV terbaru!</span>
+            <span class="font-semibold text-xs underline cursor-pointer" onclick="resetToDefault()">Muat Data Bawaan</span>
+        </div>
+
         <!-- KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <!-- Card Perbandingan Perangkat Daerah -->
@@ -158,70 +167,50 @@
 
     <!-- Footer -->
     <footer class="bg-white border-t border-slate-200 py-6 text-center text-slate-500 text-sm mt-12">
-        <p>&copy; 2026 Kabupaten Hulu Sungai Selatan. Rekapitulasi Petugas Penyusun LPPD & LKPJ (Dengan Deduplikasi NIP).</p>
+        <p>&copy; 2026 Kabupaten Hulu Sungai Selatan. Rekapitulasi Petugas Penyusun LPPD & LKPJ (Dynamic CSV Importer).</p>
     </footer>
 
-    <!-- JavaScript logic & Deduplikasi NIP -->
+    <!-- JavaScript logic & Parser CSV -->
     <script>
         const masterLPPD = [
-            "Bagian Hukum",
-            "Bagian Pengadaan Barang dan Jasa",
-            "Bagian Organisasi",
-            "Inspektorat Daerah",
-            "Dinas Pendidikan dan Kebudayaan",
-            "Dinas Kesehatan, Pengendalian Penduduk dan Keluarga Berencana",
-            "Dinas Pekerjaan Umum dan Penataan Ruang",
-            "Satuan Polisi Pamong Praja dan Pemadam Kebakaran",
-            "Dinas Sosial",
-            "Dinas Perumahan Rakyat dan Kawasan Permukiman, Lingkungan Hidup dan Pertanahan",
-            "Dinas Kependudukan dan Pencatatan Sipil",
-            "Dinas Perhubungan",
-            "Dinas Komunikasi, Informatika, Statistik dan Persandian",
-            "Dinas Perindustrian dan Perdagangan",
-            "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah",
-            "Dinas Penanaman Modal dan Pelayanan Terpadu Satu Pintu",
-            "Dinas Kepemudaan, Olahraga dan Pariwisata",
-            "Dinas Perpustakaan dan Kearsipan",
-            "Dinas Pertanian, Perikanan dan Pangan",
+            "Bagian Hukum", "Bagian Pengadaan Barang dan Jasa", "Bagian Organisasi", "Inspektorat Daerah",
+            "Dinas Pendidikan dan Kebudayaan", "Dinas Kesehatan, Pengendalian Penduduk dan Keluarga Berencana",
+            "Dinas Pekerjaan Umum dan Penataan Ruang", "Satuan Polisi Pamong Praja dan Pemadam Kebakaran", "Dinas Sosial",
+            "Dinas Perumahan Rakyat dan Kawasan Permukiman, Lingkungan Hidup dan Pertanahan", "Dinas Kependudukan dan Pencatatan Sipil",
+            "Dinas Perhubungan", "Dinas Komunikasi, Informatika, Statistik dan Persandian", "Dinas Perindustrian dan Perdagangan",
+            "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", "Dinas Penanaman Modal dan Pelayanan Terpadu Satu Pintu",
+            "Dinas Kepemudaan, Olahraga dan Pariwisata", "Dinas Perpustakaan dan Kearsipan", "Dinas Pertanian, Perikanan dan Pangan",
             "Dinas Pemberdayaan Masyarakat dan Desa, Pemberdayaan Perempuan dan Perlindungan Anak",
-            "Badan Perencanaan Pembangunan, Riset dan Inovasi Daerah",
-            "Badan Pengelolaan Keuangan dan Pendapatan Daerah",
-            "Badan Kepegawaian dan Pengembangan Sumber Daya Manusia",
-            "Badan Penanggulangan Bencana Daerah"
+            "Badan Perencanaan Pembangunan, Riset dan Inovasi Daerah", "Badan Pengelolaan Keuangan dan Pendapatan Daerah",
+            "Badan Kepegawaian dan Pengembangan Sumber Daya Manusia", "Badan Penanggulangan Bencana Daerah"
         ];
 
         const masterLKPJ = [
-            "Bagian Pemerintahan",
-            "Bagian Hukum", "Bagian Kesejahteraan Rakyat", "Bagian Perekonomian dan Administrasi Pembangunan", 
-            "Bagian Pengadaan Barang dan Jasa", "Bagian Umum", "Bagian Perencanaan dan Keuangan", 
-            "Bagian Organisasi", "Bagian Protokol dan Komunikasi Pimpinan", "Sekretariat DPRD", 
-            "Inspektorat Daerah", "Dinas Pendidikan dan Kebudayaan", 
+            "Bagian Pemerintahan", "Bagian Hukum", "Bagian Kesejahteraan Rakyat", "Bagian Perekonomian dan Administrasi Pembangunan", 
+            "Bagian Pengadaan Barang dan Jasa", "Bagian Umum", "Bagian Perencanaan dan Keuangan", "Bagian Organisasi", 
+            "Bagian Protokol dan Komunikasi Pimpinan", "Sekretariat DPRD", "Inspektorat Daerah", "Dinas Pendidikan dan Kebudayaan", 
             "Dinas Kesehatan, Pengendalian Penduduk dan Keluarga Berencana", "Dinas Pekerjaan Umum dan Penataan Ruang", 
-            "Satuan Polisi Pamong Praja dan Pemadam Kebakaran", "Dinas Sosial", 
-            "Dinas Perumahan Rakyat, Kawasan Permukiman dan Lingkungan Hidup", "Dinas Kependudukan dan Pencatatan Sipil", 
-            "Dinas Perhubungan", "Dinas Komunikasi, Informatika, Statistik dan Persandian", 
+            "Satuan Polisi Pamong Praja dan Pemadam Kebakaran", "Dinas Sosial", "Dinas Perumahan Rakyat dan Kawasan Permukiman, Lingkungan Hidup dan Pertanahan", 
+            "Dinas Kependudukan dan Pencatatan Sipil", "Dinas Perhubungan", "Dinas Komunikasi, Informatika, Statistik dan Persandian", 
             "Dinas Perindustrian dan Perdagangan", "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", 
             "Dinas Penanaman Modal dan Pelayanan Terpadu Satu Pintu", "Dinas Kepemudaan, Olahraga dan Pariwisata", 
             "Dinas Perpustakaan dan Kearsipan", "Dinas Pertanian, Perikanan dan Pangan", 
             "Dinas Pemberdayaan Masyarakat dan Desa, Pemberdayaan Perempuan dan Perlindungan Anak", 
             "Badan Perencanaan Pembangunan, Riset dan Inovasi Daerah", "Badan Pengelolaan Keuangan dan Pendapatan Daerah", 
             "Badan Kepegawaian dan Pengembangan Sumber Daya Manusia", "Badan Kesatuan Bangsa dan Politik", 
-            "Badan Penanggulangan Bencana Daerah", "Kecamatan Sungai Raya", "Kecamatan Padang Batung", 
-            "Kecamatan Telaga Langsat", "Kecamatan Angkinang", "Kecamatan Kandangan", "Kecamatan Loksado", 
-            "Kecamatan Daha Selatan", "Kecamatan Daha Barat", "Kecamatan Daha Utara", "Kecamatan Simpur", 
-            "Kecamatan Kalumpang", "Kelurahan Kandangan Kota", "Kelurahan Kandangan Utara", 
-            "Kelurahan Kandangan Barat", "Kelurahan Jambu Hilir", "Puskesmas Gambah", "Puskesmas Negara", 
-            "Puskesmas Angkinang", "Puskesmas Malinau", "Puskesmas Kaliring", "Puskesmas Bajayau", 
-            "Puskesmas Loksado", "Puskesmas Wasah", "Puskesmas Telaga Langsat", "Puskesmas Jambu Hilir", 
-            "Puskesmas Batang Kulur", "Puskesmas Padang Batung", "Puskesmas Baruh Jaya", "Puskesmas Sungai Pinang", 
-            "Puskesmas Kalumpang", "Puskesmas Bayanan", "Puskesmas Kandangan", "Puskesmas Sungai Raya", 
-            "Puskesmas Simpur", "Puskesmas Bamban", "Puskesmas Pasungkan"
+            "Badan Penanggulangan Bencana Daerah", "Kecamatan Sungai Raya", "Kecamatan Padang Batung", "Kecamatan Telaga Langsat", 
+            "Kecamatan Angkinang", "Kecamatan Kandangan", "Kecamatan Loksado", "Kecamatan Daha Selatan", "Kecamatan Daha Barat", 
+            "Kecamatan Daha Utara", "Kecamatan Simpur", "Kecamatan Kalumpang", "Kelurahan Kandangan Kota", "Kelurahan Kandangan Utara", 
+            "Kelurahan Kandangan Barat", "Kelurahan Jambu Hilir", "Puskesmas Gambah", "Puskesmas Negara", "Puskesmas Angkinang", 
+            "Puskesmas Malinau", "Puskesmas Kaliring", "Puskesmas Bajayau", "Puskesmas Loksado", "Puskesmas Wasah", 
+            "Puskesmas Telaga Langsat", "Puskesmas Jambu Hilir", "Puskesmas Batang Kulur", "Puskesmas Padang Batung", 
+            "Puskesmas Baruh Jaya", "Puskesmas Sungai Pinang", "Puskesmas Kalumpang", "Puskesmas Bayanan", "Puskesmas Kandangan", 
+            "Puskesmas Sungai Raya", "Puskesmas Simpur", "Puskesmas Bamban", "Puskesmas Pasungkan"
         ];
 
-        // Data LPPD
-        const rawLPPD = [
+        // Data Bawaan Default
+        let defaultLPPD = [
             {nip: "198011282009042003", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Novarita Adiyanti, S.Pd", link: "https://drive.google.com/open?id=1IMS0OWNp2AHUbBV2FWjoTK_pzhyQnlmi"},
-            {nip: "198011282009042003", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Novarita Adiyanti, S.Pd", link: "https://drive.google.com/open?id=1l676WBW6DEh7LzjmZ6R0kf4vax3qC2Tc"},
             {nip: "199406152019032014", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Noor Shella Riyanda, S.Kom", link: "https://drive.google.com/open?id=1vU_O3_NldQWlsLalx6fJdfmJ2-d6lB5V"},
             {nip: "199602122020122018", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Salwa Noor Azizah, S.A.B", link: "https://drive.google.com/open?id=1wW_P4_OmeRXmtMbmy7gKegnK3-e7mC6W"},
             {nip: "199508242022031005", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Ahmad Hafizy Anshari, S.Psi", link: "https://drive.google.com/open?id=1xX_Q5_PnfSYnuNcnz8hLfooL4-f8nD7X"},
@@ -235,7 +224,6 @@
             {nip: "199810142022032009", pd: "Dinas Kependudukan dan Pencatatan Sipil", nama: "Nabella Deswari Oktaviaa, S.E.", link: "https://drive.google.com/open?id=1jMO2ORBVXq2FHvlRBYOrYkvAEXa7Cr4-"},
             {nip: "198404202010011014", pd: "Badan Kepegawaian dan Pengembangan Sumber Daya Manusia", nama: "IHWAN APRIADI, S.I.P", link: "https://drive.google.com/open?id=12Vq93-Zgc-oh7UGLzln3f4wUHjK7R6TI"},
             {nip: "199712032022031008", pd: "Badan Kepegawaian dan Pengembangan Sumber Daya Manusia", nama: "MUHAMMAD HILMAN ZAIN, S.Tr.Kes", link: "https://drive.google.com/open?id=13Vq93-Zgc-oh7UGLzln3f4wUHjK7R6TJ"},
-            {nip: "198404202010011014", pd: "Badan Kepegawaian dan Pengembangan Sumber Daya Manusia", nama: "IHWAN APRIADI, S.I.P", link: "https://drive.google.com/open?id=14Vq93-Zgc-oh7UGLzln3f4wUHjK7R6TK"},
             {nip: "198908152014021003", pd: "Dinas Kesehatan, Pengendalian Penduduk dan Keluarga Berencana", nama: "Akhmad Rizqan Rifani, Amd.Kep", link: "https://drive.google.com/open?id=19BgEt8rPjuIM7FltF86dM_Elhzbpangc"},
             {nip: "198705032011012015", pd: "Dinas Kepemudaan, Olahraga dan Pariwisata", nama: "Eka Sri Wahyuni, S.Pd", link: "https://drive.google.com/open?id=11RQR2TmzNxZmrX5QXlz4vhME1ycIR5m4"},
             {nip: "198106142010011017", pd: "Dinas Perpustakaan dan Kearsipan", nama: "Edy Setiawan, A.Md.", link: "https://drive.google.com/open?id=1xUK8AEDTZIENMlAPOCOcWmhEfjHRHu8R"},
@@ -258,14 +246,12 @@
             {nip: "199806252024211004", pd: "Dinas Pendidikan dan Kebudayaan", nama: "Ahmad Maulidi Khaidir, S.Kom", link: "https://drive.google.com/open?id=1TwVTh_SSm6IuiwKDZqn4VHoskU3BD0se"}
         ];
 
-        // Data LKPJ
-        const rawLKPJ = [
+        let defaultLKPJ = [
             {nip: "199308142019031005", pd: "Kelurahan Kandangan Kota", nama: "AGUS SAPUTRA, S.A.P", link: "https://drive.google.com/open?id=1EvfKVweFWcBLcTi9eTmZ3-kyS304Mswp"},
             {nip: "198011282009042003", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Novarita Adiyanti, S.Pd", link: "https://drive.google.com/open?id=1PmxTpxhBlGqTuHQKc-nXoXyvivnRz0G0"},
             {nip: "197405161998032007", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Jauhartati, S.Pd, M.Pd", link: "https://drive.google.com/open?id=1QmxTpxhBlGqTuHQKc-nXoXyvivnRz0G1"},
             {nip: "198104182009041002", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "M. Aris Aprianoor, ST,MT", link: "https://drive.google.com/open?id=1RmxTpxhBlGqTuHQKc-nXoXyvivnRz0G2"},
             {nip: "197108251998031008", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "H. M. Afif Bizri, SH, M.Hum", link: "https://drive.google.com/open?id=1SmxTpxhBlGqTuHQKc-nXoXyvivnRz0G3"},
-            {nip: "198011282009042003", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Novarita Adiyanti, S.Pd", link: "https://drive.google.com/open?id=1TmxTpxhBlGqTuHQKc-nXoXyvivnRz0G4"},
             {nip: "199007252015031004", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Yulfani Akhmad Rizky, S.T", link: "https://drive.google.com/open?id=1UmxTpxhBlGqTuHQKc-nXoXyvivnRz0G5"},
             {nip: "199406152019032014", pd: "Dinas Tenaga Kerja, Koperasi, Usaha Kecil dan Menengah", nama: "Noor Shella Riyanda, S.Kom", link: "https://drive.google.com/open?id=1VmxTpxhBlGqTuHQKc-nXoXyvivnRz0G6"},
             {nip: "199803142022032007", pd: "Inspektorat Daerah", nama: "Karina Aisya Puteri, S.H", link: "https://drive.google.com/open?id=1GnUuvRFAIXTMReWRaeL9_EtQ4jnjGVFl"},
@@ -278,7 +264,6 @@
             {nip: "199810142022032009", pd: "Dinas Kependudukan dan Pencatatan Sipil", nama: "Nabella Deswari Oktavia, S.E.", link: "https://drive.google.com/open?id=1mAD_5yh3x8reQ7414A2CMCX_edj0Gn82"},
             {nip: "197308162003121009", pd: "Kelurahan Kandangan Utara", nama: "Saniah, S.Kep", link: "https://drive.google.com/open?id=1znf0CE5U2uOB2acNmJtF_ZiqG6pTeC_v"},
             {nip: "197308162003121009", pd: "Badan Penanggulangan Bencana Daerah", nama: "H. HALIKINNOR, A.Md", link: "https://drive.google.com/open?id=1Crzc8D-cKLno0KV2PQzCaQUZZcYbWBkJ"},
-            {nip: "197308162003121009", pd: "Badan Penanggulangan Bencana Daerah", nama: "H. HALIKINNOR, A.Md", link: "https://drive.google.com/open?id=1Drzc8D-cKLno0KV2PQzCaQUZZcYbWBkK"},
             {nip: "198403172010011022", pd: "Badan Penanggulangan Bencana Daerah", nama: "RISWANDI, ST", link: "https://drive.google.com/open?id=1Erzc8D-cKLno0KV2PQzCaQUZZcYbWBkL"},
             {nip: "198504122010011024", pd: "Badan Penanggulangan Bencana Daerah", nama: "FATHURRAHMAN, A.Md", link: "https://drive.google.com/open?id=1Frzc8D-cKLno0KV2PQzCaQUZZcYbWBkM"},
             {nip: "198809182011011005", pd: "Badan Penanggulangan Bencana Daerah", nama: "FAUZAN ANSYARI, ST", link: "https://drive.google.com/open?id=1Grzc8D-cKLno0KV2PQzCaQUZZcYbWBkN"},
@@ -288,7 +273,6 @@
             {nip: "198604172010011013", pd: "Satuan Polisi Pamong Praja dan Pemadam Kebakaran", nama: "Muhammad David Hariyadi, S.E.", link: "https://drive.google.com/open?id=17X3bsJaiH6ij-f4mxilQsZGqxIr2FXAG"},
             {nip: "198704252011011008", pd: "Dinas Kesehatan, Pengendalian Penduduk dan Keluarga Berencana", nama: "HENDRY RISWANDI, A.Md. AK", link: "https://drive.google.com/open?id=1TZFSJ5jqEtDpaBdinO-BI2eB0xRqhycb"},
             {nip: "198211262011012002", pd: "Dinas Perpustakaan dan Kearsipan", nama: "Fitriani, S.Sos, M.IP", link: "https://drive.google.com/open?id=1E-4LDlJIns7yt2I3MHWVtSASCuQ6ZS3i"},
-            {nip: "198211262011012002", pd: "Dinas Perpustakaan dan Kearsipan", nama: "Fitriani, S.Sos, M.IP", link: "https://drive.google.com/open?id=1F-4LDlJIns7yt2I3MHWVtSASCuQ6ZS3j"},
             {nip: "198605152010011017", pd: "Dinas Kepemudaan, Olahraga dan Pariwisata", nama: "Ahmad Syahrizal Hakim, S.E.", link: "https://drive.google.com/open?id=12NWwnCnr8n5eNXkXa6r3n8xDctT3a4vO"},
             {nip: "198908122014021002", pd: "Kecamatan Sungai Raya", nama: "ERVANNY AGUSRIZANI, S.Pd", link: "https://drive.google.com/open?id=1Cp91s3AUn4TlosCbYZHf9Xgf8NdSMX9S"},
             {nip: "199402182019031006", pd: "Dinas Perumahan Rakyat dan Kawasan Permukiman, Lingkungan Hidup dan Pertanahan", nama: "ULWAN NAUFAL, S.Ak", link: "https://drive.google.com/open?id=1R8s1PaXXQappfbOKAwED_VTiec5tA_In"},
@@ -306,14 +290,329 @@
             {nip: "198905312025211031", pd: "Dinas Pendidikan dan Kebudayaan", nama: "Fitrya Noor, S.Pd", link: "https://drive.google.com/open?id=1g5pdItZKbHlngjyVRSuzM1GaheEZIbOV"},
             {nip: "199806252024211004", pd: "Dinas Pendidikan dan Kebudayaan", nama: "Ahmad Maulidi Khaidir, S.Kom", link: "https://drive.google.com/open?id=1WBVUyjMTmXT8J_XBVm5A1o8ttNUuo-Sk"},
             {nip: "198412142009012001", pd: "Badan Pengelolaan Keuangan dan Pendapatan Daerah", nama: "NOORMILAWATI, SE", link: "https://drive.google.com/open?id=1VuHSvxkZyVKaJt3jUYV5wNSNYimEHeO0"},
-            {nip: "199208052025212177", pd: "Dinas Pendidikan dan Kebudayaan", nama: "Rizky Purwandari, S.Pd", link: "https://drive.google.com/open?id=1TwVTh_SSm6IuiwKDZqn4VHoskU3BD0se"}
+            {nip: "199208052025212177", pd: "Dinas Pendidikan dan Kebudayaan", nama: "Rizky Purwandari, S.Pd", link: "https://drive.google.com/open?id=1TwVTh_SSm6IuiwKDZqn4VHoskU3BD0se"},
+            // Data Terbaru LKPJ (Contoh 5 data baru yang masuk hari ini)
+            {nip: "200105042025062012", pd: "Dinas Pertanian, Perikanan dan Pangan", nama: "MUIZHATU SAFARINA, S.A.P", link: "https://drive.google.com/open?id=1rnpYrA42lD9ANaPHv_rUDhkUtoSX0Zm5"},
+            {nip: "200204062025062002", pd: "Dinas Pekerjaan Umum dan Penataan Ruang", nama: "Widy Aprilia, S. Ars", link: "https://drive.google.com/open?id=1gKeEtnDeJLyoBGWaISPEI3Oy7nKul2vj"},
+            {nip: "198211262011012002", pd: "Dinas Perpustakaan dan Kearsipan", nama: "Fitriani, S.Sos, M.IP", link: "https://drive.google.com/open?id=1BsfDncSIWypla7cGMaEk2cBYDWJDgd9m"} // Duplikat NIP yang diperbarui
         ];
+
+        let activeRawData = defaultLPPD;
+        let activeTabName = 'lppd';
+        let pdChartInstance = null;
+
+        const SHEET_SOURCES = {
+            lppd: { id: "1GaozouEKM4LDV_j0ySZSmTxfHDUSG2AQodJ9JpJ_fUk", gid: "2099367765", label: "LPPD" },
+            lkpj: { id: "1mZ-pThhyIAaueenVpyRoWTWBLTWj9dLUjCsMBReHL2w", gid: "662276653", label: "LKPJ Bupati" }
+        };
+        const SHEET_REFRESH_INTERVAL_MS = 60 * 1000;
+
+        const fallbackLPPD = defaultLPPD;
+        const fallbackLKPJ = defaultLKPJ;
+        let latestSheetData = { lppd: null, lkpj: null };
+        let manualOverrides = { lppd: false, lkpj: false };
+        let sheetRefreshRunning = false;
+        let lastSheetSyncAt = null;
+
+        function setSheetSyncStatus(message, state, updatedAt) {
+            const box = document.getElementById("sheetSyncStatus");
+            const messageNode = document.getElementById("sheetSyncMessage");
+            const updatedNode = document.getElementById("sheetSyncUpdated");
+            if (!box || !messageNode || !updatedNode) return;
+
+            const styleByState = {
+                loading: "mb-5 px-4 py-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl text-sm",
+                success: "mb-5 px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm",
+                warning: "mb-5 px-4 py-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-sm"
+            };
+            box.className = styleByState[state] || styleByState.loading;
+            messageNode.textContent = message;
+            updatedNode.textContent = updatedAt ? "Pembaruan terakhir: " + updatedAt : "";
+        }
+
+        function normalizeSheetHeader(value) {
+            return String(value || "")
+                .replace(/^\uFEFF/, "")
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, "");
+        }
+
+        function findSheetHeader(headers, aliases) {
+            const normalized = headers.map(function(header) {
+                return { original: header, value: normalizeSheetHeader(header) };
+            });
+
+            for (const alias of aliases) {
+                const exact = normalized.find(function(header) {
+                    return header.value === alias;
+                });
+                if (exact) return exact.original;
+            }
+
+            for (const alias of aliases) {
+                const partial = normalized.find(function(header) {
+                    return header.value.includes(alias);
+                });
+                if (partial) return partial.original;
+            }
+            return null;
+        }
+
+        function mapGoogleSheetRows(rows, headers) {
+            const pdHeader = findSheetHeader(headers, [
+                "namaperangkatdaerahunitkerja",
+                "namaperangkatdaerah",
+                "unitkerja",
+                "perangkatdaerah",
+                "namainstansi"
+            ]);
+            const nameHeader = findSheetHeader(headers, [
+                "namapetugaspenyusun",
+                "namapetugas",
+                "namapenyusun"
+            ]);
+            const nipHeader = findSheetHeader(headers, [
+                "nip",
+                "nomorindukpegawai"
+            ]);
+            const linkHeader = findSheetHeader(headers, [
+                "unggahsuratpenugasan",
+                "uploadsuratpenugasan",
+                "suratpenugasan",
+                "linksurat"
+            ]);
+
+            if (!pdHeader || !nameHeader) {
+                throw new Error("Kolom nama perangkat daerah atau nama petugas tidak ditemukan.");
+            }
+
+            return rows.map(function(row) {
+                return {
+                    nip: nipHeader && row[nipHeader] ? String(row[nipHeader]).trim() : "",
+                    pd: row[pdHeader] ? String(row[pdHeader]).trim() : "",
+                    nama: row[nameHeader] ? String(row[nameHeader]).trim() : "",
+                    link: linkHeader && row[linkHeader] ? String(row[linkHeader]).trim() : "#"
+                };
+            }).filter(function(item) {
+                return item.nip || item.pd || item.nama;
+            });
+        }
+
+        function loadGoogleSheet(tab) {
+            return new Promise(function(resolve, reject) {
+                const source = SHEET_SOURCES[tab];
+                const url = "https://docs.google.com/spreadsheets/d/" +
+                    encodeURIComponent(source.id) +
+                    "/export?format=csv&gid=" +
+                    encodeURIComponent(source.gid) +
+                    "&cacheBust=" + Date.now();
+
+                Papa.parse(url, {
+                    download: true,
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(result) {
+                        try {
+                            const headers = result.meta && result.meta.fields ? result.meta.fields : [];
+                            resolve(mapGoogleSheetRows(result.data || [], headers));
+                        } catch (error) {
+                            reject(error);
+                        }
+                    },
+                    error: function(error) {
+                        reject(error || new Error("Permintaan CSV gagal."));
+                    }
+                });
+            });
+        }
+
+        async function refreshFromGoogleSheets() {
+            if (sheetRefreshRunning) return;
+            sheetRefreshRunning = true;
+            setSheetSyncStatus("Memeriksa data terbaru dari Google Sheets...", "loading");
+
+            try {
+                const tabs = Object.keys(SHEET_SOURCES);
+                const results = await Promise.all(tabs.map(async function(tab) {
+                    try {
+                        return { tab: tab, data: await loadGoogleSheet(tab), error: null };
+                    } catch (error) {
+                        return { tab: tab, data: null, error: error };
+                    }
+                }));
+
+                const failedLabels = [];
+                let activeDataChanged = false;
+
+                results.forEach(function(result) {
+                    if (result.error) {
+                        failedLabels.push(SHEET_SOURCES[result.tab].label);
+                        return;
+                    }
+
+                    latestSheetData[result.tab] = result.data;
+                    if (manualOverrides[result.tab]) return;
+
+                    const currentData = result.tab === "lppd" ? defaultLPPD : defaultLKPJ;
+                    const changed = JSON.stringify(currentData) !== JSON.stringify(result.data);
+                    if (result.tab === "lppd") {
+                        defaultLPPD = result.data;
+                    } else {
+                        defaultLKPJ = result.data;
+                    }
+
+                    if (result.tab === activeTabName && changed) {
+                        activeRawData = result.data;
+                        activeDataChanged = true;
+                    }
+                });
+
+                if (activeDataChanged) renderDashboard();
+
+                lastSheetSyncAt = new Date().toLocaleString("id-ID", {
+                    dateStyle: "short",
+                    timeStyle: "medium"
+                });
+
+                if (failedLabels.length) {
+                    setSheetSyncStatus(
+                        "Data " + failedLabels.join(" dan ") +
+                        " belum dapat diakses. Atur Akses umum sheet menjadi " +
+                        "“Siapa saja yang memiliki link — Pelihat” agar CSV dapat dibaca.",
+                        "warning",
+                        lastSheetSyncAt
+                    );
+                } else if (manualOverrides.lppd || manualOverrides.lkpj) {
+                    const overriddenTabs = tabs.filter(function(tab) {
+                        return manualOverrides[tab];
+                    }).map(function(tab) {
+                        return SHEET_SOURCES[tab].label;
+                    });
+                    setSheetSyncStatus(
+                        "Data sheet tersinkron. Impor CSV manual masih digunakan untuk " +
+                        overriddenTabs.join(" dan ") + ".",
+                        "success",
+                        lastSheetSyncAt
+                    );
+                } else {
+                    setSheetSyncStatus(
+                        "Data otomatis tersinkron dari kedua Google Sheets.",
+                        "success",
+                        lastSheetSyncAt
+                    );
+                }
+            } catch (error) {
+                setSheetSyncStatus(
+                    "Sinkronisasi Google Sheets gagal. Data bawaan atau CSV manual tetap tersedia.",
+                    "warning"
+                );
+            } finally {
+                sheetRefreshRunning = false;
+            }
+        }
+
+        function escapeHTML(value) {
+            const replacements = {
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                "\"": "&quot;",
+                "'": "&#39;"
+            };
+            return String(value == null ? "" : value).replace(/[&<>"']/g, function(character) {
+                return replacements[character];
+            });
+        }
+
+        function safeHttpUrl(value) {
+            const candidate = String(value || "").trim();
+            try {
+                const parsed = new URL(candidate);
+                return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : "#";
+            } catch (error) {
+                return "#";
+            }
+        }
+        function switchTab(tab) {
+            activeTabName = tab;
+            const btnLppd = document.getElementById('btn-lppd');
+            const btnLkpj = document.getElementById('btn-lkpj');
+
+            if(tab === 'lppd') {
+                activeRawData = defaultLPPD;
+                btnLppd.className = "px-4 py-2 bg-white text-emerald-900 font-semibold rounded-lg shadow transition";
+                btnLkpj.className = "px-4 py-2 bg-emerald-950 text-white font-semibold rounded-lg shadow transition hover:bg-emerald-900";
+            } else {
+                activeRawData = defaultLKPJ;
+                btnLkpj.className = "px-4 py-2 bg-white text-emerald-900 font-semibold rounded-lg shadow transition";
+                btnLppd.className = "px-4 py-2 bg-emerald-950 text-white font-semibold rounded-lg shadow transition hover:bg-emerald-900";
+            }
+            renderDashboard();
+        }
+
+        // Fungsi Membaca File CSV yang Diunggah Pengguna Secara Instan
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const parsedData = results.data.map(row => ({
+                        nip: row['NIP'] ? row['NIP'].toString().trim() : '',
+                        pd: row['Nama Perangkat Daerah/Unit Kerja'] ? row['Nama Perangkat Daerah/Unit Kerja'].trim() : '',
+                        nama: row['Nama Petugas Penyusun'] ? row['Nama Petugas Penyusun'].trim() : '',
+                        link: row['Unggah Surat Penugasan'] ? row['Unggah Surat Penugasan'].trim() : '#'
+                    }));
+
+                    if (activeTabName === 'lppd') {
+                        defaultLPPD = parsedData;
+                        manualOverrides.lppd = true;
+                    } else {
+                        defaultLKPJ = parsedData;
+                        manualOverrides.lkpj = true;
+                    }
+                    activeRawData = parsedData;
+
+                    document.getElementById('uploadAlert').classList.remove('hidden');
+                    document.getElementById('uploadAlertText').innerText = `Berhasil memuat ${parsedData.length} baris data terbaru dari file ${file.name}!`;
+                    setSheetSyncStatus('Impor CSV manual aktif untuk tab ' + activeTabName.toUpperCase() + '.', 'success', lastSheetSyncAt);
+                    renderDashboard();
+                },
+                error: function(err) {
+                    alert("Gagal membaca file CSV: " + err.message);
+                }
+            });
+        }
+
+        function resetToDefault() {
+            manualOverrides[activeTabName] = false;
+            if (activeTabName === 'lppd') {
+                defaultLPPD = latestSheetData.lppd || fallbackLPPD;
+                activeRawData = defaultLPPD;
+            } else {
+                defaultLKPJ = latestSheetData.lkpj || fallbackLKPJ;
+                activeRawData = defaultLKPJ;
+            }
+            document.getElementById('uploadAlert').classList.add('hidden');
+            renderDashboard();
+            if (latestSheetData[activeTabName]) {
+                setSheetSyncStatus(
+                    'Menampilkan data terbaru dari Google Sheets.',
+                    'success',
+                    lastSheetSyncAt
+                );
+            }
+        }
 
         function getDeduplicatedData(rawData) {
             const nipMap = {};
             rawData.forEach(item => {
                 if (item.nip && item.nip.trim() !== "") {
-                    nipMap[item.nip.trim()] = item;
+                    nipMap[item.nip.trim()] = item; // Timpa dengan entri terbaru jika NIP sama (duplikasi)
                 } else {
                     nipMap[item.pd + '_' + item.nama] = item;
                 }
@@ -342,34 +641,12 @@
             return Object.values(map);
         }
 
-        let currentRawData = rawLPPD;
-        let activeTabName = 'lppd';
-        let pdChartInstance = null;
-
-        function switchTab(tab) {
-            activeTabName = tab;
-            const btnLppd = document.getElementById('btn-lppd');
-            const btnLkpj = document.getElementById('btn-lkpj');
-
-            if(tab === 'lppd') {
-                currentRawData = rawLPPD;
-                btnLppd.className = "px-4 py-2 bg-white text-emerald-900 font-semibold rounded-lg shadow transition";
-                btnLkpj.className = "px-4 py-2 bg-emerald-950 text-white font-semibold rounded-lg shadow transition hover:bg-emerald-900";
-            } else {
-                currentRawData = rawLKPJ;
-                btnLkpj.className = "px-4 py-2 bg-white text-emerald-900 font-semibold rounded-lg shadow transition";
-                btnLppd.className = "px-4 py-2 bg-emerald-950 text-white font-semibold rounded-lg shadow transition hover:bg-emerald-900";
-            }
-            renderDashboard();
-        }
-
         function renderDashboard() {
-            const groupedData = groupDataByPD(currentRawData);
+            const groupedData = groupDataByPD(activeRawData);
             const masterList = (activeTabName === 'lppd') ? masterLPPD : masterLKPJ;
             const targetCount = masterList.length;
             
             const terdaftarPDNames = groupedData.map(item => item.pd.toLowerCase());
-
             const belumMendaftarPD = masterList.filter(masterPD => {
                 return !terdaftarPDNames.some(registered => registered === masterPD.toLowerCase() || registered.includes(masterPD.toLowerCase()) || masterPD.toLowerCase().includes(registered));
             });
@@ -378,9 +655,8 @@
             const belumCount = belumMendaftarPD.length;
             const percentage = Math.round((terdaftarCount / targetCount) * 100);
 
-            // Statistik Deduplikasi
-            const totalRawEntries = currentRawData.length;
-            const totalPetugasUnik = getDeduplicatedData(currentRawData).length;
+            const totalRawEntries = activeRawData.length;
+            const totalPetugasUnik = getDeduplicatedData(activeRawData).length;
             const jumlahDuplikat = totalRawEntries - totalPetugasUnik;
 
             document.getElementById('kpi-pd-terdaftar').innerText = terdaftarCount;
@@ -389,10 +665,9 @@
             document.getElementById('kpi-pd-bar').style.width = Math.min(percentage, 100) + "%";
             document.getElementById('kpi-pd-belum').innerText = belumCount;
             
-            // Update KPI Total & Keterangan Ganda
             document.getElementById('kpi-total').innerText = totalPetugasUnik + " Orang";
-            document.getElementById('kpi-duplikat').innerText = jumlahDuplikat + " Entri Ganda";
-            document.getElementById('kpi-info-ganda').innerText = `Dari total ${totalRawEntries} pengiriman form`;
+            document.getElementById('kpi-duplikat').innerText = jumlahDuplikat + " Ganda";
+            document.getElementById('kpi-info-ganda').innerText = `Dari total ${totalRawEntries} entri form`;
 
             document.getElementById('table-title').innerText = `Perangkat Daerah yang Sudah Mendaftar ${activeTabName.toUpperCase()} (${terdaftarCount} dari ${targetCount} Instansi)`;
             document.getElementById('table-title-belum').innerText = `Perangkat Daerah yang Belum Mendaftar ${activeTabName.toUpperCase()} (${belumCount} Instansi)`;
@@ -404,15 +679,15 @@
                 tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
                 tr.innerHTML = `
                     <td class="p-4 text-center font-semibold text-slate-500">${index + 1}</td>
-                    <td class="p-4 font-bold text-slate-900">${item.pd}</td>
+                    <td class="p-4 font-bold text-slate-900">${escapeHTML(item.pd)}</td>
                     <td class="p-4 text-center font-extrabold text-emerald-700 bg-emerald-50/50 rounded-lg">${item.count} Orang</td>
                     <td class="p-4 text-xs text-slate-600">
                         <ul class="list-disc list-inside space-y-0.5">
-                            ${item.petugas.map(p => `<li>${p}</li>`).join('')}
+                            ${item.petugas.map(p => `<li>${escapeHTML(p)}</li>`).join('')}
                         </ul>
                     </td>
                     <td class="p-4 text-center">
-                        <a href="${item.link}" target="_blank" class="inline-flex items-center px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-md text-xs font-semibold hover:bg-emerald-200 transition">
+                        <a href="${escapeHTML(safeHttpUrl(item.link))}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-md text-xs font-semibold hover:bg-emerald-200 transition">
                             📄 Lihat Surat Tugas
                         </a>
                     </td>
@@ -487,8 +762,13 @@
             }
         }
 
-        // Pemuatan Pertama Kali
+        // Pemuatan pertama, pembaruan berkala, dan pemeriksaan saat tab kembali aktif.
         switchTab('lppd');
+        refreshFromGoogleSheets();
+        window.setInterval(refreshFromGoogleSheets, SHEET_REFRESH_INTERVAL_MS);
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) refreshFromGoogleSheets();
+        });
     </script>
 </body>
 </html>
